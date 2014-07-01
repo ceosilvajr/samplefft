@@ -9,7 +9,20 @@
     tools:context=".MainActivity">
 
     <TextView
-        android:text="@string/hello_world"
+        android:id="@+id/sample_frequency"
+        android:textStyle="bold"
+        android:textSize="70dp"
+        android:layout_centerInParent="true"
+        android:text="124"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_centerHorizontal="true"
+        android:textStyle="bold"
+        android:textSize="20dp"
+        android:layout_alignParentBottom="true"
+        android:text="FREQUENCY HZ"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
