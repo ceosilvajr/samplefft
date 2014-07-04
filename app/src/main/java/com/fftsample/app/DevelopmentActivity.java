@@ -6,6 +6,8 @@ import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.v7.app.ActionBarActivity;
 import android.util.Log;
 import android.view.Menu;
@@ -14,20 +16,26 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 
-public class DemoActivity extends ActionBarActivity {
+public class DevelopmentActivity extends ActionBarActivity {
 
     private static final int RECORDER_BPP = 16;
     private static final String AUDIO_RECORDER_FILE_EXT_WAV = ".wav";
     private static final String AUDIO_RECORDER_FOLDER = "AudioRecorder";
     private static final String AUDIO_RECORDER_TEMP_FILE = "record_temp.raw";
     private static final int RECORDER_SAMPLE_RATE = 22050;
-    private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_STEREO;
+    private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_MONO;
     private static final int RECORDER_AUDIO_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 
     private AudioRecord recorder = null;
@@ -35,20 +43,21 @@ public class DemoActivity extends ActionBarActivity {
     private Thread recordingThread = null;
     private boolean isRecording = false;
 
-    private TextView mTxtTitle;
+    private TextView mTxtFrequency;
+    private Handler handler;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_demo);
 
-        bufferSize = AudioRecord.getMinBufferSize(RECORDER_SAMPLE_RATE, RECORDER_CHANNELS, RECORDER_AUDIO_ENCODING);
-
         Button start = (Button) findViewById(R.id.demo_start_record);
         Button stop = (Button) findViewById(R.id.demo_stop_record);
-        mTxtTitle = (TextView) findViewById(R.id.title);
 
-        mTxtTitle.setText("WAV CONVERSION");
+        TextView mTxtTitle = (TextView) findViewById(R.id.title);
+        mTxtTitle.setText("INTEGRATION");
+
+        mTxtFrequency = (TextView) findViewById(R.id.frequency);
 
         start.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -56,7 +65,6 @@ public class DemoActivity extends ActionBarActivity {
                 startRecording();
             }
         });
-
         stop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -93,6 +101,9 @@ public class DemoActivity extends ActionBarActivity {
     }
 
     private void startRecording() {
+
+        bufferSize = AudioRecord.getMinBufferSize(RECORDER_SAMPLE_RATE, RECORDER_CHANNELS, RECORDER_AUDIO_ENCODING);
+
         recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
                 RECORDER_SAMPLE_RATE, RECORDER_CHANNELS, RECORDER_AUDIO_ENCODING, bufferSize);
 
@@ -113,54 +124,57 @@ public class DemoActivity extends ActionBarActivity {
 
     private void writeAudioDataToFile() {
 
-        byte data[] = new byte[bufferSize];
-        String filename = getTempFilename();
-        FileOutputStream os = null;
+        short data[] = new short[bufferSize];
+        String recordingFile = getTempFilename();
 
+        DataOutputStream dos = null;
         try {
-            os = new FileOutputStream(filename);
+            dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(recordingFile)));
         } catch (FileNotFoundException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
 
         int read = 0;
+        handler = new Handler(Looper.getMainLooper());
 
-        if (null != os) {
-            while (isRecording) {
+        while (isRecording) {
+            read = recorder.read(data, 0, bufferSize);
 
-                read = recorder.read(data, 0, bufferSize);
-
-                if (AudioRecord.ERROR_INVALID_OPERATION != read) {
-                    try {
-                        os.write(data);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+            for (int i = 0; i < bufferSize && i < read; i++) {
+                try {
+                    dos.writeShort(data[i]);
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-
             }
 
-            try {
-                os.close();
-                os.flush();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            final int freq = calculate(RECORDER_SAMPLE_RATE, data);
+
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mTxtFrequency.setText("" + freq);
+                }
+            });
         }
+
+        try {
+            dos.close();
+            dos.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
     private void stopRecording() {
         if (null != recorder) {
             isRecording = false;
-
             recorder.stop();
             recorder.release();
-
             recorder = null;
             recordingThread = null;
         }
-
         copyWaveFile(getTempFilename(), getFilename());
         deleteTempFile();
     }
@@ -263,16 +277,10 @@ public class DemoActivity extends ActionBarActivity {
     /**
      * calculate frequency using zero crossings
      */
-    private int calculate(int sampleRate, byte[] audioData) {
 
-        int size = audioData.length;
-        short[] shortArray = new short[size];
+    public static int calculate(int sampleRate, short[] audioData) {
 
-        for (int index = 0; index < size; index++) {
-            shortArray[index] = (short) audioData[index];
-        }
-
-        int numSamples = shortArray.length;
+        int numSamples = audioData.length;
         int numCrossing = 0;
         for (int p = 0; p < numSamples - 1; p++) {
             if ((audioData[p] > 0 && audioData[p + 1] <= 0) ||
@@ -283,33 +291,9 @@ public class DemoActivity extends ActionBarActivity {
 
         float numSecondsRecorded = (float) numSamples / (float) sampleRate;
         float numCycles = numCrossing / 2;
-        final float frequency = numCycles / numSecondsRecorded;
-
+        float frequency = numCycles / numSecondsRecorded;
 
         return (int) frequency;
-    }
-
-    private float zero(short data[], int bufferSize) {
-        int numCrossing = 0; //initialize your number of zero crossings to 0
-        for (int p = 0; p < bufferSize / 4; p += 4) {
-            if (data[p] > 0 && data[p + 1] <= 0) numCrossing++;
-            if (data[p] < 0 && data[p + 1] >= 0) numCrossing++;
-            if (data[p + 1] > 0 && data[p + 2] <= 0) numCrossing++;
-            if (data[p + 1] < 0 && data[p + 2] >= 0) numCrossing++;
-            if (data[p + 2] > 0 && data[p + 3] <= 0) numCrossing++;
-            if (data[p + 2] < 0 && data[p + 3] >= 0) numCrossing++;
-            if (data[p + 3] > 0 && data[p + 4] <= 0) numCrossing++;
-            if (data[p + 3] < 0 && data[p + 4] >= 0) numCrossing++;
-        }//for p
-
-        for (int p = (bufferSize / 4) * 4; p < bufferSize - 1; p++) {
-            if (data[p] > 0 && data[p + 1] <= 0) numCrossing++;
-            if (data[p] < 0 && data[p + 1] >= 0) numCrossing++;
-        }
-
-        float frequency = (RECORDER_SAMPLE_RATE / bufferSize) * (numCrossing / 2);
-
-        return frequency;
     }
 
     @Override
@@ -325,7 +309,7 @@ public class DemoActivity extends ActionBarActivity {
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
-        if (id == R.id.menu_main) {
+        if (id == R.id.menu_record) {
             startActivity(new Intent(this, DevelopmentActivity.class));
             finish();
             return true;
@@ -337,20 +321,4 @@ public class DemoActivity extends ActionBarActivity {
         }
         return super.onOptionsItemSelected(item);
     }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-
-        if (null != recorder) {
-            isRecording = false;
-
-            recorder.stop();
-            recorder.release();
-
-            recorder = null;
-            recordingThread = null;
-        }
-    }
-
 }

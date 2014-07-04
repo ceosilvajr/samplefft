@@ -1,9 +1,21 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    tools:context="com.fftsample.app.DemoActivity" >
-    <item android:id="@+id/action_settings"
-        android:title="@string/action_settings"
+    tools:context="com.fftsample.app.DemoActivity">
+
+    <item
+        android:id="@+id/menu_main"
+        android:title="@string/integration"
+        android:orderInCategory="100"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_record"
+        android:title="@string/recording"
+        android:orderInCategory="100"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_scoring"
+        android:title="@string/scoring"
         android:orderInCategory="100"
         app:showAsAction="never" />
 </menu>
